@@ -4,13 +4,14 @@ import { useRouter } from 'vue-router'
 import { authStore } from '../stores/auth'
 
 const router = useRouter()
-const email = ref('maksim.nikitin@flant.com')
+const email = ref('superadmin@local')
+const password = ref('superadmin-change-me')
 const error = computed(() => authStore.state.error)
 
 async function submit() {
   try {
-    const user = await authStore.login(email.value)
-    router.push(user.role === 'admin' ? '/admin' : '/app')
+    const user = await authStore.login(email.value, password.value)
+    router.push(authStore.isSuperadmin(user) ? '/admin' : '/app')
   } catch {
     // handled by store
   }
@@ -23,7 +24,7 @@ async function submit() {
       <div class="login-page__eyebrow">Vue SPA</div>
       <h1>Core API Console</h1>
       <p>
-        Sign in with the email known to `core-api`. The backend issues a Bearer token that the UI uses for API and websocket access.
+        Локальный вход теперь работает по email и password. В production сюда позже подключат OIDC/OTP, а сейчас используются серверные password-based sessions с TTL и revoke.
       </p>
 
       <label>
@@ -31,8 +32,13 @@ async function submit() {
         <input v-model="email" class="input input--hero" type="email" placeholder="name@example.com" @keyup.enter="submit" />
       </label>
 
+      <label>
+        <span>Password</span>
+        <input v-model="password" class="input input--hero" type="password" placeholder="Local password" @keyup.enter="submit" />
+      </label>
+
       <button class="button button--wide" :disabled="authStore.state.loading" @click="submit">
-        {{ authStore.state.loading ? 'Issuing token...' : 'Get access token' }}
+        {{ authStore.state.loading ? 'Signing in...' : 'Sign in' }}
       </button>
 
       <div v-if="error" class="notice notice--error">{{ error }}</div>

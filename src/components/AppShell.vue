@@ -42,7 +42,7 @@ const emit = defineEmits(['select', 'logout'])
         <div class="topbar__user">
           <div>
             <strong>{{ user.username }}</strong>
-            <span>{{ user.email }} · {{ user.role }}</span>
+            <span>{{ user.email }} · {{ user.role }}<template v-if="user.team_name"> · {{ user.team_name }}</template></span>
           </div>
           <button class="button button--ghost" @click="emit('logout')">Logout</button>
         </div>

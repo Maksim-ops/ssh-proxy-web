@@ -24,7 +24,7 @@ router.beforeEach(async (to) => {
   }
 
   const loggedIn = Boolean(authStore.state.token && authStore.state.user)
-  const isAdmin = authStore.state.user?.role === 'admin'
+  const isAdmin = authStore.isSuperadmin(authStore.state.user)
 
   if (to.path === '/login' && loggedIn) {
     return isAdmin ? '/admin' : '/app'

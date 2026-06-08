@@ -8,6 +8,7 @@ const props = defineProps({
   endpoint: { type: String, required: true },
   fields: { type: Array, required: true },
   itemLabel: { type: String, required: true },
+  sources: { type: Array, default: () => [] },
 })
 
 const items = ref([])
@@ -16,17 +17,23 @@ const error = ref('')
 const saving = ref(false)
 const editingId = ref(null)
 const form = ref({})
+const optionSets = ref({})
 
 const columns = computed(() => props.fields.filter((field) => field.list !== false))
+const formFields = computed(() => props.fields.filter((field) => field.form !== false))
 
 function emptyForm() {
   const data = {}
-  for (const field of props.fields) {
+  for (const field of formFields.value) {
     if (field.type === 'checkbox') {
       data[field.name] = field.default ?? false
-    } else {
-      data[field.name] = field.default ?? ''
+      continue
     }
+    if (field.type === 'select') {
+      data[field.name] = field.default === undefined || field.default === null ? '' : String(field.default)
+      continue
+    }
+    data[field.name] = field.default ?? ''
   }
   return data
 }
@@ -49,19 +56,53 @@ async function load() {
   }
 }
 
+async function loadSources() {
+  if (!props.sources.length) {
+    optionSets.value = {}
+    return
+  }
+
+  const nextOptions = {}
+  try {
+    await Promise.all(
+      props.sources.map(async (source) => {
+        const payload = await apiRequest(source.endpoint)
+        nextOptions[source.name] = Array.isArray(payload) ? payload : payload.items || []
+      }),
+    )
+    optionSets.value = nextOptions
+  } catch (err) {
+    error.value = err.message
+  }
+}
+
+async function reloadAll() {
+  await Promise.all([loadSources(), load()])
+}
+
+function normalizeFormValue(field, value) {
+  if (field.type === 'checkbox') {
+    return Boolean(value)
+  }
+  if (field.type === 'select') {
+    return value === null || value === undefined || value === '' ? '' : String(value)
+  }
+  return value ?? ''
+}
+
 function startEdit(item) {
   editingId.value = item.id
   form.value = emptyForm()
-  for (const field of props.fields) {
+  for (const field of formFields.value) {
     if (field.name in item) {
-      form.value[field.name] = item[field.name] ?? (field.type === 'checkbox' ? false : '')
+      form.value[field.name] = normalizeFormValue(field, item[field.name])
     }
   }
 }
 
 function sanitizePayload() {
   const payload = {}
-  for (const field of props.fields) {
+  for (const field of formFields.value) {
     const value = form.value[field.name]
     if (field.type === 'checkbox') {
       payload[field.name] = Boolean(value)
@@ -74,9 +115,56 @@ function sanitizePayload() {
       payload[field.name] = ''
       continue
     }
-    payload[field.name] = field.type === 'number' ? Number(value) : value
+    if (field.type === 'number' || field.valueType === 'number') {
+      payload[field.name] = Number(value)
+      continue
+    }
+    payload[field.name] = value
   }
   return payload
+}
+
+function getOptions(field) {
+  if (field.optionsSource) {
+    return optionSets.value[field.optionsSource] || []
+  }
+  return field.options || []
+}
+
+function getOptionValue(field, option) {
+  if (option && typeof option === 'object') {
+    if (field.optionValue && option[field.optionValue] !== undefined) {
+      return option[field.optionValue]
+    }
+    if (option.id !== undefined) {
+      return option.id
+    }
+    if (option.value !== undefined) {
+      return option.value
+    }
+  }
+  return option
+}
+
+function getOptionLabel(field, option) {
+  if (option && typeof option === 'object') {
+    if (field.optionLabel && option[field.optionLabel] !== undefined) {
+      return option[field.optionLabel]
+    }
+    if (option.label !== undefined) {
+      return option.label
+    }
+    if (option.name !== undefined) {
+      return option.name
+    }
+    if (option.username !== undefined) {
+      return option.username
+    }
+    if (option.proxy !== undefined) {
+      return option.proxy
+    }
+  }
+  return String(option)
 }
 
 async function save() {
@@ -90,7 +178,7 @@ async function save() {
       await apiRequest(props.endpoint, { method: 'POST', body: payload })
     }
     resetForm()
-    await load()
+    await reloadAll()
   } catch (err) {
     error.value = err.message
   } finally {
@@ -104,7 +192,7 @@ async function remove(id) {
   }
   try {
     await apiRequest(`${props.endpoint}/${id}`, { method: 'DELETE' })
-    await load()
+    await reloadAll()
     if (editingId.value === id) {
       resetForm()
     }
@@ -113,9 +201,9 @@ async function remove(id) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   resetForm()
-  load()
+  await reloadAll()
 })
 </script>
 
@@ -133,7 +221,7 @@ onMounted(() => {
 
     <div class="crud-layout">
       <div class="crud-form">
-        <label v-for="field in fields" :key="field.name">
+        <label v-for="field in formFields" :key="field.name">
           <span>{{ field.label }}</span>
           <textarea
             v-if="field.type === 'textarea'"
@@ -141,6 +229,20 @@ onMounted(() => {
             class="input input--textarea"
             :placeholder="field.placeholder || ''"
           />
+          <select
+            v-else-if="field.type === 'select'"
+            v-model="form[field.name]"
+            class="input"
+          >
+            <option value="">{{ field.placeholder || `Select ${field.label}` }}</option>
+            <option
+              v-for="option in getOptions(field)"
+              :key="`${field.name}-${getOptionValue(field, option)}`"
+              :value="String(getOptionValue(field, option))"
+            >
+              {{ getOptionLabel(field, option) }}
+            </option>
+          </select>
           <input
             v-else-if="field.type !== 'checkbox'"
             v-model="form[field.name]"

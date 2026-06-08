@@ -49,7 +49,7 @@ watch(requestId, () => {
 }, { immediate: true })
 
 function back() {
-  router.push(user.value.role === 'admin' ? '/admin' : '/app')
+  router.push(authStore.isSuperadmin(user.value) ? '/admin' : '/app')
 }
 
 function openRunning(item) {
@@ -82,12 +82,12 @@ function openExecStream(payload) {
       <button class="button button--ghost" @click="back">Back</button>
       <div>
         <h1>Stream workspace</h1>
-        <p>Queue commands, jump into a live websocket stream, and keep historical logs visible in the same place.</p>
+        <p>Queue commands, follow live websocket output и рядом держите сохранённый лог выбранной сессии.</p>
       </div>
     </div>
 
     <div class="stack-layout">
-      <ExecPanel :servers="servers" title="Run inside stream workspace" description="Use Queue only to keep the page steady, or Open in stream to switch the terminal to the new command." @started="openExecStream" />
+      <ExecPanel :servers="servers" title="Run inside stream workspace" description="Queue only оставляет страницу стабильной, Open in stream переключает терминал на новый запуск." @started="openExecStream" />
       <RunningCommands @watch="openRunning" />
       <div v-if="error" class="notice notice--error">{{ error }}</div>
       <div v-else-if="loading" class="notice">Loading session logs...</div>
